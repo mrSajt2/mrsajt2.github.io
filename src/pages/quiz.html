@@ -28,7 +28,24 @@
     
     </div>
     
-    <script>
+    <script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCw0MWDxCK0dgWarSQCFzCGa06Sv7LR4xY",
+  authDomain: "futazai-20776.firebaseapp.com",
+  projectId: "futazai-20776",
+  storageBucket: "futazai-20776.firebasestorage.app",
+  messagingSenderId: "123367613667",
+  appId: "1:123367613667:web:3e8fec1b68983be8aa11d6",
+  measurementId: "G-QWLHPP2FDC"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+        
         const flow = {
   start: "q1",
 
@@ -117,15 +134,16 @@
         
           inputBox.appendChild(input);
         
-          nextBtn.onclick = () => {
+          nextBtn.onclick = async () => {
             const answer = answers[current];
             const next = q.type === "select"
               ? q.options[answer]
               : q.next;
         
             if (next === "end") {
-              alert("Készen is vagyunk!!");
-              console.log(answers);
+                await addDoc(collection(db, "users"), {
+                    answers: answers
+                });
               return;
             }
         
