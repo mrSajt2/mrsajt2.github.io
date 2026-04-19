@@ -137,9 +137,15 @@ const db = getFirestore(app);
     text: "Mehet heti 1 erősítés is?",
     type: "buttons",
     options: {
-      "Igen": "end",
-      "Nem": "end"
+      "Igen": "q7",
+      "Nem": "q7"
     }
+  },
+
+  q7: {
+    text: "Adatkezelési hozzájárulás",
+    type: "consent",
+    next: "end"
   }
 };
         let current = flow.start;
@@ -148,10 +154,17 @@ const db = getFirestore(app);
         const questionText = document.getElementById("question-text");
         const inputBox = document.getElementById("input-box");
         const nextBtn = document.getElementById("next-btn");
+        const consentVersion = "privacy-v1";
         
         async function finishQuiz() {
           await addDoc(collection(db, "users"), {
-            answers
+            answers,
+            consent: {
+              accepted: true,
+              acceptedAt: new Date().toISOString(),
+              version: consentVersion,
+              scope: "Személyre szabott edzésterv készítése, beleértve az esetlegesen megadott egészségügyi adatokat is."
+            }
           });
 
           alert("Készen is vagyunk!!");
@@ -256,7 +269,57 @@ const db = getFirestore(app);
             return;
           }
 
+          if (q.type === "consent") {
+            const card = document.createElement("div");
+            card.className = "consent-card";
+
+            const intro = document.createElement("p");
+            intro.className = "consent-copy";
+            intro.textContent = "A kérdőív elküldéséhez el kell fogadnod az adatkezelési tájékoztatót, és hozzá kell járulnod az adataid kezeléséhez a személyre szabott edzésterv elkészítése céljából.";
+
+            const link = document.createElement("a");
+            link.className = "consent-link";
+            link.href = "../privacy-policy.html";
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = "Adatkezelési tájékoztató megnyitása";
+
+            const label = document.createElement("label");
+            label.className = "consent-option";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = Boolean(answers.privacyConsent);
+
+            const labelText = document.createElement("span");
+            labelText.textContent = "Elfogadom az adatkezelési tájékoztatót, és hozzájárulok ahhoz, hogy a FutazAI a megadott adataimat a személyre szabott edzésterv elkészítése céljából kezelje.";
+
+            label.appendChild(checkbox);
+            label.appendChild(labelText);
+
+            const note = document.createElement("p");
+            note.className = "consent-note";
+            note.textContent = "A hozzájárulás bármikor visszavonható a kapcsolatfelvételi csatornáidon keresztül.";
+
+            checkbox.addEventListener("change", () => {
+              answers[current] = checkbox.checked ? "Elfogadva" : "";
+              answers.privacyConsent = checkbox.checked;
+              nextBtn.disabled = !checkbox.checked;
+            });
+
+            nextBtn.textContent = "Küldés";
+            nextBtn.disabled = !checkbox.checked;
+
+            card.appendChild(intro);
+            card.appendChild(link);
+            card.appendChild(label);
+            card.appendChild(note);
+            inputBox.appendChild(card);
+            return;
+          }
+
           let input;
+          nextBtn.textContent = "Következő";
 
           if (q.type === "select") {
             input = document.createElement("select");
@@ -288,6 +351,10 @@ const db = getFirestore(app);
           const answer = answers[current];
 
           if (!answer) {
+            return;
+          }
+
+          if (q.type === "consent" && !answers.privacyConsent) {
             return;
           }
 
