@@ -27,10 +27,11 @@
     
     </div>
     
-    <script type="module">
+<script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword, sendEmailVerification, reload, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCw0MWDxCK0dgWarSQCFzCGa06Sv7LR4xY",
@@ -44,6 +45,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
         
         const flow = {
   start: "q1",
@@ -145,6 +147,12 @@ const db = getFirestore(app);
   },
 
   q8: {
+    text: "Email megerősítése",
+    type: "email-verification",
+    next: "q9"
+  },
+
+  q9: {
     text: "Adatkezelési hozzájárulás",
     type: "consent",
     next: "end"
@@ -152,6 +160,13 @@ const db = getFirestore(app);
 };
         let current = flow.start;
         const answers = {};
+        const verificationState = {
+          email: "",
+          user: null,
+          sent: false,
+          sending: false,
+          checking: false
+        };
         
         const questionText = document.getElementById("question-text");
         const inputBox = document.getElementById("input-box");
@@ -160,6 +175,111 @@ const db = getFirestore(app);
 
         function isValidEmail(email) {
           return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        }
+
+        function generateTempPassword() {
+          const randomPart = crypto.getRandomValues(new Uint32Array(2)).join("");
+          return `FutazAI!${randomPart}Aa1`;
+        }
+
+        function setEmailVerificationResult(isVerified) {
+          answers.emailVerified = isVerified;
+          answers[current] = isVerified ? "Ellenőrizve" : "";
+
+          if (isVerified) {
+            answers.emailVerifiedAt = new Date().toISOString();
+          } else {
+            answers.emailVerifiedAt = null;
+          }
+        }
+
+        async function ensureVerificationUser() {
+          const email = answers.contactEmail;
+
+          if (!email || !isValidEmail(email)) {
+            throw new Error("Adj meg egy érvényes email címet az ellenőrzéshez.");
+          }
+
+          if (verificationState.user && verificationState.email === email) {
+            return verificationState.user;
+          }
+
+          verificationState.email = email;
+
+          try {
+            const credential = await createUserWithEmailAndPassword(auth, email, generateTempPassword());
+            verificationState.user = credential.user;
+            answers.authUid = credential.user.uid;
+            return credential.user;
+          } catch (error) {
+            if (error.code === "auth/email-already-in-use") {
+              throw new Error("Ez az email cím már használatban van. Kérlek használj másik email címet az ellenőrzéshez.");
+            }
+
+            throw error;
+          }
+        }
+
+        async function sendVerificationEmail() {
+          verificationState.sending = true;
+
+          try {
+            const user = await ensureVerificationUser();
+            await sendEmailVerification(user);
+            verificationState.sent = true;
+            answers.emailVerificationSentAt = new Date().toISOString();
+            return {
+              ok: true,
+              message: `Megerősítő email elküldve erre a címre: ${answers.contactEmail}`
+            };
+          } catch (error) {
+            return {
+              ok: false,
+              message: error.message || "Nem sikerült elküldeni a megerősítő emailt."
+            };
+          } finally {
+            verificationState.sending = false;
+          }
+        }
+
+        async function checkEmailVerification() {
+          verificationState.checking = true;
+
+          try {
+            const user = verificationState.user || auth.currentUser;
+
+            if (!user) {
+              throw new Error("Először küldd el a megerősítő emailt.");
+            }
+
+            await reload(user);
+            const verifiedUser = auth.currentUser || user;
+            const isVerified = Boolean(verifiedUser.emailVerified);
+
+            setEmailVerificationResult(isVerified);
+
+            if (isVerified) {
+              return {
+                ok: true,
+                verified: true,
+                message: "Az email cím sikeresen meg lett erősítve."
+              };
+            }
+
+            return {
+              ok: true,
+              verified: false,
+              message: "Az email még nincs megerősítve. Nyisd meg az emailedben kapott linket, majd kattints újra az ellenőrzésre."
+            };
+          } catch (error) {
+            return {
+              ok: false,
+              verified: false,
+              message: error.message || "Nem sikerült ellenőrizni az email megerősítését."
+            };
+          } finally {
+            verificationState.checking = false;
+          }
         }
         
         async function finishQuiz() {
@@ -172,6 +292,8 @@ const db = getFirestore(app);
               scope: "Személyre szabott edzésterv készítése, beleértve az esetlegesen megadott egészségügyi adatokat is."
             }
           });
+
+          await signOut(auth).catch(() => {});
 
           alert("Készen is vagyunk!!");
           console.log(answers);
@@ -324,6 +446,90 @@ const db = getFirestore(app);
             return;
           }
 
+          if (q.type === "email-verification") {
+            const card = document.createElement("div");
+            card.className = "verification-card";
+
+            const intro = document.createElement("p");
+            intro.className = "verification-copy";
+            intro.textContent = `Az email címed megerősítéséhez küldünk egy linket erre a címre: ${answers.contactEmail}`;
+
+            const note = document.createElement("p");
+            note.className = "verification-note";
+            note.textContent = "Nyisd meg az emailedben kapott linket, utána gyere vissza ide, és ellenőrizd az állapotot.";
+
+            const status = document.createElement("p");
+            status.className = "verification-status";
+
+            const actions = document.createElement("div");
+            actions.className = "button-group verification-actions";
+
+            const resendBtn = document.createElement("button");
+            resendBtn.type = "button";
+            resendBtn.className = "choice-btn";
+            resendBtn.textContent = verificationState.sent ? "Email újraküldése" : "Email elküldése";
+
+            const checkBtn = document.createElement("button");
+            checkBtn.type = "button";
+            checkBtn.className = "choice-btn";
+            checkBtn.textContent = "Már megerősítettem";
+
+            const setStatus = (message, isError = false) => {
+              status.textContent = message;
+              status.className = isError ? "verification-status error" : "verification-status";
+            };
+
+            const syncState = () => {
+              answers[current] = answers.emailVerified ? "Ellenőrizve" : "";
+              nextBtn.disabled = !answers.emailVerified;
+              resendBtn.disabled = verificationState.sending;
+              checkBtn.disabled = verificationState.checking;
+              resendBtn.textContent = verificationState.sent ? "Email újraküldése" : "Email elküldése";
+            };
+
+            resendBtn.addEventListener("click", async () => {
+              syncState();
+              setStatus("Megerősítő email küldése folyamatban...");
+
+              const result = await sendVerificationEmail();
+              setStatus(result.message, !result.ok);
+              syncState();
+            });
+
+            checkBtn.addEventListener("click", async () => {
+              syncState();
+              setStatus("Ellenőrzés folyamatban...");
+
+              const result = await checkEmailVerification();
+              setStatus(result.message, !result.ok);
+              syncState();
+            });
+
+            card.appendChild(intro);
+            card.appendChild(note);
+            actions.appendChild(resendBtn);
+            actions.appendChild(checkBtn);
+            card.appendChild(actions);
+            card.appendChild(status);
+            inputBox.appendChild(card);
+
+            if (answers.emailVerified) {
+              setStatus("Az email címed már meg van erősítve.");
+            } else if (verificationState.sent) {
+              setStatus(`A megerősítő email már el lett küldve erre a címre: ${answers.contactEmail}`);
+            } else {
+              setStatus("Megerősítő email küldése folyamatban...");
+              void sendVerificationEmail().then((result) => {
+                setStatus(result.message, !result.ok);
+                syncState();
+              });
+            }
+
+            nextBtn.textContent = "Következő";
+            syncState();
+            return;
+          }
+
           if (q.type === "contact-info") {
             const wrapper = document.createElement("div");
             wrapper.className = "contact-fields";
@@ -356,6 +562,12 @@ const db = getFirestore(app);
               answers.contactName = nameInput.value.trim();
               answers.contactEmail = emailInput.value.trim();
               answers.contactPhone = phoneInput.value.trim();
+              answers.emailVerified = false;
+              answers.emailVerificationSentAt = null;
+              setEmailVerificationResult(false);
+              verificationState.email = "";
+              verificationState.user = null;
+              verificationState.sent = false;
               answers[current] = answers.contactName && isValidEmail(answers.contactEmail) ? "Kitöltve" : "";
               nextBtn.disabled = !answers[current];
             };
@@ -413,6 +625,10 @@ const db = getFirestore(app);
           }
 
           if (q.type === "inline-input" && answer === "Igen" && !answers.injuryDetail) {
+            return;
+          }
+
+          if (q.type === "email-verification" && !answers.emailVerified) {
             return;
           }
 
