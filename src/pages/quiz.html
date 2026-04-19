@@ -200,66 +200,73 @@ const db = getFirestore(app);
   nextBtn.style.display = "none";
 
           } else if (q.type === "inline-input") {
-        const wrapper = document.createElement("div");
-        wrapper.className = "button-group";
+            const wrapper = document.createElement("div");
+            wrapper.className = "button-group";
 
-        const yesBtn = document.createElement("button");
-        yesBtn.textContent = "Igen";
-        yesBtn.className = "choice-btn";
+            const yesBtn = document.createElement("button");
+            yesBtn.textContent = "Igen";
+            yesBtn.className = "choice-btn";
 
-        const noBtn = document.createElement("button");
-        noBtn.textContent = "Nem";
-        noBtn.className = "choice-btn";
+            const noBtn = document.createElement("button");
+            noBtn.textContent = "Nem";
+            noBtn.className = "choice-btn";
 
-        wrapper.appendChild(yesBtn);
-        wrapper.appendChild(noBtn);
+            wrapper.appendChild(yesBtn);
+            wrapper.appendChild(noBtn);
+            inputBox.appendChild(wrapper);
 
-        inputBox.appendChild(wrapper);
+            // INPUT (rejtve)
+            const input = document.createElement("input");
+            input.type = "text";
+            input.placeholder = "Írd le a sérülést...";
+            input.style.display = "none";
+            input.style.marginTop = "15px";
 
-        // input (rejtve eleinte)
-        const input = document.createElement("input");
-        input.type = "text";
-        input.placeholder = "Írd le a sérülést...";
-        input.style.display = "none";
-        input.style.marginTop = "15px";
+            inputBox.appendChild(input);
 
-        inputBox.appendChild(input);
+            // SEGÉD: aktív gomb kezelés
+            function setActive(btn) {
+                document.querySelectorAll(".choice-btn").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+            }
 
-        // IGEN
-        yesBtn.onclick = () => {
-            answers[current] = "Igen";
+            // 👉 IGEN
+            yesBtn.onclick = () => {
+                setActive(yesBtn);
 
-            yesBtn.classList.add("active");
-            noBtn.classList.remove("active");
+                answers[current] = "Igen";
 
-            input.style.display = "block";
-            input.focus();
+                // input megjelenik
+                input.style.display = "block";
+                input.focus();
 
-            nextBtn.style.display = "inline-block";
-            nextBtn.disabled = true;
+                nextBtn.style.display = "inline-block";
+                nextBtn.disabled = !input.value;
 
-            input.addEventListener("input", () => {
-            answers["injuryDetail"] = input.value;
-            nextBtn.disabled = !input.value;
-            });
-        };
+                // ha már volt válasz, visszatöltjük
+                input.value = answers["injuryDetail"] || "";
 
-        // NEM
-        noBtn.onclick = () => {
-            answers[current] = "Nem";
-            answers["injuryDetail"] = null;
+                input.oninput = () => {
+                answers["injuryDetail"] = input.value;
+                nextBtn.disabled = !input.value;
+                };
+            };
 
-            noBtn.classList.add("active");
+            // 👉 NEM
+            noBtn.onclick = () => {
+                setActive(noBtn);
 
-            // auto next (Stripe UX)
-            setTimeout(() => {
-            current = q.next;
-            stepIndex++;
-            updateProgress();
-            render();
-            }, 200);
-        };
-        } else {
+                answers[current] = "Nem";
+
+                // input eltűnik + reset
+                input.style.display = "none";
+                input.value = "";
+                answers["injuryDetail"] = null;
+
+                nextBtn.style.display = "inline-block";
+                nextBtn.disabled = false;
+            };
+            } else {
             input = document.createElement("input");
             input.type = q.type;
           }
@@ -276,7 +283,14 @@ const db = getFirestore(app);
             const next = q.type === "select"
               ? q.options[answer]
               : q.next;
-        
+
+// ha inline-input és IGEN → kell injuryDetail is
+            if (flow[current].type === "inline-input") {
+            if (answer === "Igen" && !answers["injuryDetail"]) return;
+            }
+
+            if (!answer) return;  
+
             if (next === "end") {
                 await addDoc(collection(db, "users"), {
                     answers: answers
