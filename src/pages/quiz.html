@@ -112,7 +112,7 @@ const db = getFirestore(app);
           questionText.textContent = q.text;
           inputBox.innerHTML = "";
           nextBtn.disabled = true;
-        
+          nextBtn.style.display = "inline-block";
           let input;
         
           if (q.type === "buttons") {
@@ -124,19 +124,38 @@ const db = getFirestore(app);
     btn.textContent = opt;
     btn.className = "choice-btn";
 
-    btn.onclick = () => {
+    btn.onclick = async () => {
       answers[current] = opt;
-      nextBtn.disabled = false;
 
-      // vizuális kiválasztás
-      document.querySelectorAll(".choice-btn").forEach(b => b.classList.remove("active"));
+      // kis vizuális feedback
       btn.classList.add("active");
+
+      // rövid delay (Apple feel)
+      setTimeout(async () => {
+        const next = q.options[opt];
+
+        if (next === "end") {
+          await addDoc(collection(db, "users"), {
+            answers
+          });
+
+          alert("Készen is vagyunk!!");
+          console.log(answers);
+          return;
+        }
+
+        current = next;
+        render();
+      }, 200); // 0.2s delay
     };
 
     wrapper.appendChild(btn);
   });
 
   inputBox.appendChild(wrapper);
+
+  // ELREJTJÜK A NEXT GOMBOT
+  nextBtn.style.display = "none";
 
           } else {
             input = document.createElement("input");
