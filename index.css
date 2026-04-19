@@ -179,3 +179,26 @@ body {
   #next-btn:enabled {
     opacity: 1;
   }
+
+/* INPUTOK */
+#input-box input,
+#input-box select {
+  width: 100%;
+  padding: 16px;
+  font-size: 18px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+/* fókusz */
+#input-box input:focus,
+#input-box select:focus {
+  border-color: black;
+}
+
+/* spacing */
+#input-box {
+  margin-top: 20px;
+}
