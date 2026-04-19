@@ -234,3 +234,7 @@ body {
   border-color: black;
   transform: scale(0.95);
 }
+
+#input-box input {
+  transition: all 0.2s ease;
+}

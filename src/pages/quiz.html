@@ -11,8 +11,11 @@
 <body>
 
     <div class="quiz">
-    
-      <h1>FutazAI onboarding</h1>
+        <div class="progress-container">
+            <div id="progress-bar"></div>
+        </div>
+
+      <h1>FutazAI</h1>
     
       <!-- KÉRDÉS -->
       <div id="question-box">
@@ -102,18 +105,10 @@ const db = getFirestore(app);
 
   q3d: {
     text: "Van e valamilyen sérülésed?",
-    type: "buttons",
-    options: {
-      "Igen": "q3e",
-      "Nem": "q4"
-    }
-  },
-
-  q3e: {
-    text: "Milyen sérülésed van?",
-    type: "text",
+    type: "inline-input",
     next: "q4"
-  },
+},
+
 
   q4: {
     text: "Órával mérsz vagy telefonnal?",
@@ -204,7 +199,67 @@ const db = getFirestore(app);
   // ELREJTJÜK A NEXT GOMBOT
   nextBtn.style.display = "none";
 
-          } else {
+          } else if (q.type === "inline-input") {
+        const wrapper = document.createElement("div");
+        wrapper.className = "button-group";
+
+        const yesBtn = document.createElement("button");
+        yesBtn.textContent = "Igen";
+        yesBtn.className = "choice-btn";
+
+        const noBtn = document.createElement("button");
+        noBtn.textContent = "Nem";
+        noBtn.className = "choice-btn";
+
+        wrapper.appendChild(yesBtn);
+        wrapper.appendChild(noBtn);
+
+        inputBox.appendChild(wrapper);
+
+        // input (rejtve eleinte)
+        const input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = "Írd le a sérülést...";
+        input.style.display = "none";
+        input.style.marginTop = "15px";
+
+        inputBox.appendChild(input);
+
+        // IGEN
+        yesBtn.onclick = () => {
+            answers[current] = "Igen";
+
+            yesBtn.classList.add("active");
+            noBtn.classList.remove("active");
+
+            input.style.display = "block";
+            input.focus();
+
+            nextBtn.style.display = "inline-block";
+            nextBtn.disabled = true;
+
+            input.addEventListener("input", () => {
+            answers["injuryDetail"] = input.value;
+            nextBtn.disabled = !input.value;
+            });
+        };
+
+        // NEM
+        noBtn.onclick = () => {
+            answers[current] = "Nem";
+            answers["injuryDetail"] = null;
+
+            noBtn.classList.add("active");
+
+            // auto next (Stripe UX)
+            setTimeout(() => {
+            current = q.next;
+            stepIndex++;
+            updateProgress();
+            render();
+            }, 200);
+        };
+        } else {
             input = document.createElement("input");
             input.type = q.type;
           }
