@@ -282,38 +282,37 @@ const db = getFirestore(app);
             const q = flow[current];
             const answer = answers[current];
 
+            // nincs válasz → nincs tovább
             if (!answer) return;
+
+            // inline-input extra check
+            if (q.type === "inline-input") {
+                if (answer === "Igen" && !answers["injuryDetail"]) return;
+            }
 
             let next;
 
-            // 🔥 INLINE-INPUT KÜLÖN KEZELÉS
-            if (q.type === "inline-input") {
-                if (answer === "Igen") {
-                if (!answers["injuryDetail"]) return; // kötelező input
-                }
+            // ha van options → abból jön a next
+            if (q.options) {
+                next = q.options[answer];
+            } else {
                 next = q.next;
             }
 
-            else if (q.type === "select") {
-                next = q.options?.[answer];
+            // safety check
+            if (!next) {
+                console.log("Nincs next:", current, answer);
+                return;
             }
 
-            else if (q.type === "buttons") {
-                next = q.options?.[answer];
-            }
-
-            else {
-                next = q.next;
-            }
-
-            if (!next) return;
-
+            // vége
             if (next === "end") {
                 alert("Készen vagy!");
                 console.log(answers);
                 return;
             }
 
+            // tovább
             stepIndex++;
             current = next;
             updateProgress();
