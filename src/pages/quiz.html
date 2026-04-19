@@ -139,6 +139,12 @@ const db = getFirestore(app);
   },
 
   q7: {
+    text: "Kapcsolattartási adatok",
+    type: "contact-info",
+    next: "q8"
+  },
+
+  q8: {
     text: "Adatkezelési hozzájárulás",
     type: "consent",
     next: "end"
@@ -151,6 +157,10 @@ const db = getFirestore(app);
         const inputBox = document.getElementById("input-box");
         const nextBtn = document.getElementById("next-btn");
         const consentVersion = "privacy-v1";
+
+        function isValidEmail(email) {
+          return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        }
         
         async function finishQuiz() {
           await addDoc(collection(db, "users"), {
@@ -311,6 +321,54 @@ const db = getFirestore(app);
             card.appendChild(label);
             card.appendChild(note);
             inputBox.appendChild(card);
+            return;
+          }
+
+          if (q.type === "contact-info") {
+            const wrapper = document.createElement("div");
+            wrapper.className = "contact-fields";
+
+            const nameInput = document.createElement("input");
+            nameInput.type = "text";
+            nameInput.placeholder = "Teljes név";
+            nameInput.autocomplete = "name";
+            nameInput.value = answers.contactName || "";
+
+            const emailInput = document.createElement("input");
+            emailInput.type = "email";
+            emailInput.placeholder = "Email cím";
+            emailInput.autocomplete = "email";
+            emailInput.inputMode = "email";
+            emailInput.value = answers.contactEmail || "";
+
+            const phoneInput = document.createElement("input");
+            phoneInput.type = "tel";
+            phoneInput.placeholder = "Telefonszám (opcionális)";
+            phoneInput.autocomplete = "tel";
+            phoneInput.inputMode = "tel";
+            phoneInput.value = answers.contactPhone || "";
+
+            const helper = document.createElement("p");
+            helper.className = "contact-helper";
+            helper.textContent = "A név és az email cím kötelező. Telefonszámot csak akkor adj meg, ha szeretnéd.";
+
+            const updateContactState = () => {
+              answers.contactName = nameInput.value.trim();
+              answers.contactEmail = emailInput.value.trim();
+              answers.contactPhone = phoneInput.value.trim();
+              answers[current] = answers.contactName && isValidEmail(answers.contactEmail) ? "Kitöltve" : "";
+              nextBtn.disabled = !answers[current];
+            };
+
+            [nameInput, emailInput, phoneInput].forEach((field) => {
+              field.addEventListener("input", updateContactState);
+              wrapper.appendChild(field);
+            });
+
+            inputBox.appendChild(wrapper);
+            inputBox.appendChild(helper);
+            nextBtn.textContent = "Következő";
+            updateContactState();
             return;
           }
 
