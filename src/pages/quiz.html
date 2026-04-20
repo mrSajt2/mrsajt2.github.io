@@ -68,20 +68,17 @@ const quizStorageKey = "futazai-quiz-state";
 
   q2b: {
     text: "Melyik táv?",
-    type: "buttons",
+    type: "buttons-with-input",
+    inputTrigger: "Több",
+    inputKey: "customDistance",
+    inputPlaceholder: "Add meg a távot km-ben...",
     options: {
         "5k": "q3a",
         "10k": "q3a",
         "21k": "q3a",
         "42k": "q3a",
-        "Több": "q2c"
+        "Több": "q3a"
     }
-  },
-
-  q2c: {
-    text: "Mekkora távról van szó pontosan?(km)",
-    type: "number",
-    next: "q3a"
   },
 
   q3a: {
@@ -449,6 +446,86 @@ const quizStorageKey = "futazai-quiz-state";
             return;
           }
 
+          if (q.type === "buttons-with-input") {
+            const wrapper = document.createElement("div");
+            wrapper.className = "button-group";
+
+            const detailInput = document.createElement("input");
+            detailInput.type = "number";
+            detailInput.placeholder = q.inputPlaceholder;
+            detailInput.style.display = "none";
+            detailInput.style.marginTop = "15px";
+            detailInput.value = answers[q.inputKey] || "";
+
+            const updateState = () => {
+              const selected = answers[current];
+              const needsInput = selected === q.inputTrigger;
+              const detailValue = detailInput.value.trim();
+
+              detailInput.style.display = needsInput ? "block" : "none";
+
+              if (!needsInput) {
+                answers[q.inputKey] = null;
+                nextBtn.disabled = !selected;
+              } else {
+                answers[q.inputKey] = detailValue;
+                nextBtn.disabled = !detailValue;
+              }
+
+              persistQuizState();
+            };
+
+            Object.keys(q.options).forEach((opt) => {
+              const btn = document.createElement("button");
+              btn.textContent = opt;
+              btn.className = "choice-btn";
+
+              if (answers[current] === opt) {
+                btn.classList.add("active");
+              }
+
+              btn.onclick = () => {
+                answers[current] = opt;
+
+                Array.from(wrapper.querySelectorAll(".choice-btn")).forEach((choiceBtn) => {
+                  choiceBtn.classList.remove("active");
+                });
+
+                btn.classList.add("active");
+                updateState();
+
+                if (opt === q.inputTrigger) {
+                  detailInput.focus();
+                } else {
+                  setTimeout(async () => {
+                    const next = q.options[opt];
+
+                    if (next === "end") {
+                      await finishQuiz();
+                      return;
+                    }
+
+                    current = next;
+                    persistQuizState();
+                    render();
+                  }, 200);
+                }
+              };
+
+              wrapper.appendChild(btn);
+            });
+
+            detailInput.addEventListener("input", () => {
+              updateState();
+            });
+
+            inputBox.appendChild(wrapper);
+            inputBox.appendChild(detailInput);
+            nextBtn.textContent = "Következő";
+            updateState();
+            return;
+          }
+
           if (q.type === "consent") {
             const card = document.createElement("div");
             card.className = "consent-card";
@@ -681,6 +758,10 @@ const quizStorageKey = "futazai-quiz-state";
           }
 
           if (q.type === "inline-input" && answer === "Igen" && !answers.injuryDetail) {
+            return;
+          }
+
+          if (q.type === "buttons-with-input" && answer === q.inputTrigger && !answers[q.inputKey]) {
             return;
           }
 
