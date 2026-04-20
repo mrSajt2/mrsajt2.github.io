@@ -193,21 +193,10 @@ html {
 width: 100%;
 padding: 16px;
 font-size: 18px;
-min-height: 52px;
 border-radius: 12px;
 border: 1px solid #ddd;
 outline: none;
 transition: all 0.2s ease;
-box-sizing: border-box;
-position: relative;
-z-index: 2;
-pointer-events: auto;
-touch-action: manipulation;
--webkit-user-select: text;
-user-select: text;
--webkit-appearance: none;
-appearance: none;
-background: white;
 }
 
 /* fÃ³kusz */
@@ -609,7 +598,6 @@ margin-top: 10px;
     box-sizing: border-box;
     font-size: 16px;
     padding: 14px 16px;
-    min-height: 52px;
   }
 
   .button-group {
@@ -649,9 +637,5 @@ margin-top: 10px;
   .verification-note,
   .verification-status {
     font-size: 15px;
-  }
-
-  button:hover {
-    transform: none;
   }
 }
