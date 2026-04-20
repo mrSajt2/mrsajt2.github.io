@@ -282,10 +282,17 @@ width: 100%;
 #input-box .consent-option input[type="checkbox"] {
 width: 18px;
 height: 18px;
+min-height: 18px;
 padding: 0;
 margin-top: 4px;
-border-radius: 6px;
+margin-right: 0;
+border-radius: 4px;
 flex: 0 0 18px;
+box-sizing: border-box;
+appearance: checkbox;
+-webkit-appearance: checkbox;
+background: white;
+display: block;
 }
 
 .consent-option span {
