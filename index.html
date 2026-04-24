@@ -12,9 +12,15 @@
 <body>
 
   <!-- NAVBAR -->
-  <nav>
-    <div><strong>FutazAI</strong></div>
-    <div>
+  <nav class="site-nav">
+    <div class="nav-top">
+      <div class="nav-brand"><strong>FutazAI</strong></div>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav-links" aria-label="Menü megnyitása">
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+    <div class="nav-links" id="site-nav-links">
       <a href="#">Features</a>
       <a href="src/pages/qanda.html">Q&amp;A</a>
       <a href="#">Login</a>
@@ -59,6 +65,16 @@
 
   <!-- ANIMÁCIÓ SCRIPT -->
   <script>
+    const nav = document.querySelector(".site-nav");
+    const navToggle = document.querySelector(".nav-toggle");
+
+    if (nav && navToggle) {
+      navToggle.addEventListener("click", () => {
+        const isOpen = nav.classList.toggle("nav-open");
+        navToggle.setAttribute("aria-expanded", String(isOpen));
+      });
+    }
+
     const elements = document.querySelectorAll(".fade-in");
 
     const observer = new IntersectionObserver((entries) => {

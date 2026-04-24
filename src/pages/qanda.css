@@ -9,7 +9,8 @@ body {
   background: #fff;
 }
 
-nav {
+.site-nav {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -18,13 +19,47 @@ nav {
   gap: 20px;
 }
 
-nav > div:last-child {
+.nav-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.nav-brand {
+  font-size: 14px;
+}
+
+.nav-links {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
 }
 
-nav a {
+.nav-toggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.nav-toggle span {
+  display: flex;
+  width: 18px;
+  height: 1.5px;
+  margin: 0 auto;
+  background: black;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.nav-toggle span + span {
+  margin-top: 5px;
+}
+
+.site-nav a {
   margin-left: 20px;
   text-decoration: none;
   color: black;
@@ -130,32 +165,51 @@ footer {
 }
 
 @media (max-width: 640px) {
-  nav {
-    padding: 18px 20px;
-    flex-direction: column;
+  .site-nav {
+    padding: 14px 20px;
+    display: block;
+    gap: 0;
+  }
+
+  .nav-top {
     gap: 12px;
-    align-items: stretch;
   }
 
-  nav > div:first-child {
-    text-align: center;
+  .nav-toggle {
+    display: inline-block;
   }
 
-  nav > div:last-child {
-    justify-content: center;
-    gap: 10px;
-    padding: 10px;
+  .nav-links {
+    display: none;
+    margin-top: 12px;
+    padding: 12px;
     border-radius: 18px;
-    background: #f5f5f7;
+    background: rgba(245, 245, 247, 0.94);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.08);
   }
 
-  nav a {
+  .site-nav.nav-open .nav-links {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .site-nav.nav-open .nav-toggle span:first-child {
+    transform: translateY(3.25px) rotate(45deg);
+  }
+
+  .site-nav.nav-open .nav-toggle span:last-child {
+    transform: translateY(-3.25px) rotate(-45deg);
+  }
+
+  .site-nav a {
     margin-left: 0;
-    margin-right: 0;
-    padding: 10px 14px;
-    border-radius: 999px;
+    padding: 12px 14px;
+    border-radius: 12px;
     background: white;
-    border: 1px solid rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.04);
   }
 
   .qa-page {
