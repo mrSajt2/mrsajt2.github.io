@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parkour Duó</title>
+<style>
+:root{color-scheme:dark;--bg:#12142a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0;background:var(--bg)}
+body{display:flex;align-items:center;justify-content:center;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif}
+canvas{width:100%;max-width:min(100vw,calc((100vh - 8px) * 16 / 9));aspect-ratio:16/9;display:block;background:#1b1f3b}
+</style>
+</head>
+<body>
+<canvas id="c" width="960" height="540" tabindex="0"></canvas>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=960,H=540,WIN=3;
+const G=1900,SPEED=280,JUMP=-650,FONT='"Avenir Next","Helvetica Neue",Arial,sans-serif';
+// Pályagenerátor: 10 témájú pálya, mindegyiknek más a hangulata és a fő akadálya
+let cams=[0,0],WORLD,FLAG,solids,movers,spikes,cps,boxes,blocks,traps,pads,shots=[],lvl=0;
+// téma: ég (3 szín), platform, platform teteje, városkép
+const T=[['#1b1f3b','#6b3560','#d9654f','#141629','#8f86c4','#2a1f45'],['#050816','#101a3d','#274472','#0a0f24','#5fa8ff','#0b1230'],
+['#f2a65a','#f7c97e','#fde9b8','#6b3f1d','#e8b06a','#b9733a'],['#3b6ea5','#8fc5e8','#e5f6ff','#2c4a6b','#d8f1ff','#5d89b5'],
+['#1f3d2b','#3f7a4a','#a8d08d','#1e2a1b','#7bcf6a','#2c5535'],['#2a0a0a','#7a1f0f','#ff7a2e','#1a0c0c','#ff9a4d','#3a1410'],
+['#10002b','#3c096c','#ff2e97','#0d0221','#00f5d4','#240046'],['#05445e','#189ab4','#75e6da','#042b3b','#d4f1f4','#0a5c7a'],
+['#1c1f26','#3a4352','#7a8696','#12151b','#a9b7c9','#2a303b'],['#2d1b4e','#c2527a','#ffd89b','#1a1030','#ffd1a1','#4a2a63']];
+const TN=['Alkony','Éjszaka','Sivatag','Jég','Erdő','Láva','Neon','Óceán','Vihar','Hajnal'];
+const ITEMS=['slow','slow','rev','frz','block','trap','turbo'];
+function rng(s){return()=>(s=(s*1664525+1013904223)>>>0)/4294967296;}
+const cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+function load(n){
+ const r=rng(n*7919+13);solids=[[0,440,420,100]];movers=[];spikes=[];cps=[[0,60,440]];boxes=[];blocks=[];traps=[];pads=[];shots=[];
+ let x=420,y=440,cnt=0;const len=2600+n*260,g=n<1?0:n<6?1:2;
+ const P=(px,py,w,h,cr)=>{const q=[px,py,w,h||18];if(cr){q.cr=1;q.tm=-1;q.gone=0;}solids.push(q);return q;};
+ const cp=q=>cps.push([q[0],q[0]+q[2]/2-13,q[1]]);
+ // típusok: 0 ugrás, 1 lépcső, 2 trambulin, 3 oszlopok, 4 omló, 5 mozgó platform
+ const av=[1,n>=1,n>=1,n>=2,n>=3,n>=2],pool=[0,0];
+ av.forEach((v,k)=>{if(v){pool.push(k);if(k==n%6)pool.push(k,k,k);}});
+ while(x<len){cnt++;
+  if(n>0&&n%3==0&&cnt==1){
+   solids.push([x,440,240,100],[x+90,160,24,200],[x+210,100,24,340],[x+234,100,260,18]);
+   cps.push([x+234,x+250,100]);x+=494;y=100;
+  }else if(cnt%5==0){
+   const gx=x+60+r()*40,gy=cl(y+r()*80-40,170,470),w=260+g*150;
+   solids.push([gx,gy,w,H-gy+60]);cps.push([gx,gx+20,gy]);
+   for(let k=0;k<g;k++)spikes.push([gx+100+k*150,gy-16,60,16]);
+   x=gx+w;y=gy;
+  }else{
+   const t=pool[Math.floor(r()*pool.length)];
+   if(t==1){const up=y>260;for(let j=0,k=3+(r()*2|0);j<k;j++){const ny=cl(y+(up?-40:40),150,470);P(x+55,ny,90);x+=145;y=ny;}cp(solids[solids.length-1]);}
+   else if(t==2){const px=x+60+r()*30,ny=Math.max(150,y-200),nx=px+240;P(px,y,150);pads.push([px+55,y-10,40,10]);cp(P(nx,ny,140));x=nx+140;y=ny;}
+   else if(t==3){for(let j=0;j<3;j++){const ny=cl(y+r()*100-50,170,470),px=x+60+r()*30;P(px,ny,56,H-ny+60);x=px+56;y=ny;}cp(solids[solids.length-1]);}
+   else if(t==4){for(let j=0;j<3;j++){const ny=cl(y+r()*60-30,150,470),px=x+60+r()*30;P(px,ny,100,18,1);x=px+100;y=ny;}}
+   else if(t==5){
+    const rg=120+Math.min(n,5)*8,m=[x+20,y,90,18];m.base=x+20;m.range=rg;m.ph=r()*3;m.dx=0;movers.push(m);
+    const px=x+20+rg+90+25,w=120+r()*60;cp(P(px,y,w));x=px+w;
+   }else{
+    const dy=y<250?30+r()*40:r()*100-40,ny=cl(y+dy,150,470);
+    let gap=Math.min(135,65+r()*(25+n*6));if(ny<y-20)gap=Math.min(gap,90);
+    const w=Math.max(64,130-n*6+r()*40);P(x+gap,ny,w);if(cnt%3==0)cps.push([x+gap,x+gap+w/2-13,ny]);x+=gap+w;y=ny;
+   }}}
+ const fy=Math.min(y,460),fx=x+80;solids.push([fx,fy,380,H-fy+60]);FLAG=fx+260;WORLD=fx+420;
+ // pályánként pontosan 3 véletlen-doboz: a pálya negyedénél, felénél és háromnegyedénél
+ for(const f of [0.25,0.5,0.75]){let best=null,bd=1e9;
+  for(const q of solids){const c=q[0]+q[2]/2;if(!q.cr&&q[2]>=70&&q[0]>300&&q[0]+q[2]<FLAG-200&&Math.abs(c-FLAG*f)<bd&&!boxes.some(b=>Math.abs(b.x-(c-14))<5)){bd=Math.abs(c-FLAG*f);best=q;}}
+  if(best)boxes.push({x:best[0]+best[2]/2-14,y:best[1]-52,t:0});}
+}
+const IN={slow:'Lassítás',rev:'Fordított irányítás',frz:'Fagyasztás',block:'Blokk',trap:'Tüskecsapda',turbo:'Turbó'};
+const FN={slow:'Lassítva',rev:'Fordított irányítás',frz:'Lefagyva',turbo:'Turbó'};
+function applyItem(i,it){const p=ps[i],o=ps[1-i];p.msg=it=='turbo'?'Turbó, 4 mp!':IN[it]+' az ellenfélre!';p.mt=2.5;
+ if(it=='turbo')p.fx.turbo=4;else if(it=='slow')o.fx.slow=5;else if(it=='rev')o.fx.rev=5;else if(it=='frz')o.fx.frz=1.6;
+ else{const a=it=='block'?[o.x+100,o.gy-44,44,44]:[o.x+100,o.gy-16,50,16];a.ttl=9;
+  for(let k=0;k<4&&it=='block'&&ps.some(q=>hit(q,a));k++)a[0]+=50;
+  (it=='block'?blocks:traps).push(a);}}
+function shoot(i){const p=ps[i];if(p.cd>0||p.fx.frz>0)return;p.cd=0.6;shots.push({x:p.x+p.w/2,y:p.y+14,vx:p.face*560,o:1-i,ttl:1.1,i});}
+function tickWorld(dt){
+ for(let k=shots.length-1;k>=0;k--){const b=shots[k];b.x+=b.vx*dt;b.ttl-=dt;let dead=b.ttl<=0;const r=[b.x-6,b.y-6,12,12];
+  if(!dead)for(const q of all())if(r[0]<q[0]+q[2]&&r[0]+12>q[0]&&r[1]<q[1]+q[3]&&r[1]+12>q[1]){dead=true;break;}
+  const o=ps[b.o];
+  if(!dead&&hit(o,r)){o.vx=Math.sign(b.vx)*340;o.vy=-190;o.lock=0.25;o.ground=null;dead=true;}
+  if(dead)shots.splice(k,1);}
+ for(const q of solids)if(q.cr){
+  if(q.gone>0){q.gone-=dt;continue;}
+  if(q.tm>=0){q.tm-=dt;if(q.tm<0){q.gone=3;q.tm=-1;}}
+  else if(ps.some(p=>p.ground===q))q.tm=0.5;}
+ for(const b of boxes)if(b.t>0)b.t-=dt;
+ for(const a of [blocks,traps])for(let k=a.length-1;k>=0;k--){a[k].ttl-=dt;if(a[k].ttl<=0)a.splice(k,1);}
+}
+const keys={},jp={};
+function clearKeys(){for(const k in keys)keys[k]=0;}
+addEventListener('blur',clearKeys);
+document.addEventListener('visibilitychange',clearKeys);
+addEventListener('keydown',e=>{if(e.code.startsWith('Arrow')||e.code=='Space')e.preventDefault();
+ if(e.metaKey){clearKeys();return;} // macOS: Cmd mellett a keyup nem érkezik meg, ezért ragadna a gomb
+ if(!e.repeat)jp[e.code]=1;keys[e.code]=1;});
+addEventListener('keyup',e=>{keys[e.code]=0;});
+cv.addEventListener('blur',clearKeys);
+const ctl=[{l:'KeyA',r:'KeyD',j:'KeyW',u:'KeyQ'},{l:'ArrowLeft',r:'ArrowRight',j:'ArrowUp',u:'Enter'}];
+const col=['#ff7a45','#22d3c0'],names=['1. játékos','2. játékos'];
+let ps,score=[0,0],state='menu',winner=-1,cam=0,t=0,time=0,flash=[0,0];
+function mk(i){return{x:40+i*40,y:380,w:26,h:38,vx:0,vy:0,ground:null,coyote:0,buf:0,wall:0,lock:0,cp:0,face:1,item:null,cd:0,mt:0,msg:'',fx:{slow:0,rev:0,frz:0,turbo:0},gy:440}}
+function reset(){load(lvl);ps=[mk(0),mk(1)];cams=[0,0];time=0;t=0;winner=-1;flash=[0,0];}
+reset();
+const all=()=>solids.filter(q=>!(q.gone>0)).concat(movers,blocks);
+const hit=(a,b)=>a.x<b[0]+b[2]&&a.x+a.w>b[0]&&a.y<b[1]+b[3]&&a.y+a.h>b[1];
+function die(i){const p=ps[i],c=cps[p.cp];p.x=c[1];p.y=c[2]-p.h-2;p.vx=p.vy=0;p.ground=null;flash[i]=0.8;}
+function step(p,i,dt){
+ const c=ctl[i],fx=p.fx,L=keys[c.l]?1:0,R=keys[c.r]?1:0,dir=fx.frz>0?0:(R-L)*(fx.rev>0?-1:1);
+ for(const k in fx)if(fx[k]>0)fx[k]-=dt;
+ p.cd-=dt;p.mt-=dt;
+ if(jp[c.u])shoot(i);
+ if(dir)p.face=dir;
+ if(jp[c.j]&&fx.frz<=0)p.buf=0.12;else p.buf-=dt;
+ if(p.lock>0)p.lock-=dt;
+ const acc=(p.ground?3200:2100)*(p.lock>0?0.15:1),tg=dir*SPEED*(fx.slow>0?0.5:1)*(fx.turbo>0?1.4:1);
+ p.vx+=Math.max(-acc*dt,Math.min(acc*dt,tg-p.vx));
+ p.coyote=p.ground?0.1:p.coyote-dt;
+ if(p.buf>0&&p.coyote>0){p.vy=JUMP;p.buf=0;p.coyote=0;p.ground=null;}
+ else if(p.buf>0&&p.wall&&!p.ground){p.vy=-620;p.vx=-p.wall*300;p.lock=0.2;p.buf=0;p.wall=0;}
+ let g=G;if(p.vy<0&&!keys[c.j])g*=2.4;
+ p.vy=Math.min(900,p.vy+g*dt);
+ if(p.wall&&!p.ground&&dir===p.wall&&p.vy>110)p.vy=110;
+ const S=all();
+ p.x+=p.vx*dt;
+ for(const s of S)if(hit(p,s)){if(p.vx>0)p.x=s[0]-p.w;else if(p.vx<0)p.x=s[0]+s[2];p.vx=0;}
+ p.y+=p.vy*dt;p.ground=null;
+ for(const s of S)if(hit(p,s)){if(p.vy>0){p.y=s[1]-p.h;p.ground=s;}else p.y=s[1]+s[3];p.vy=0;}
+ p.wall=0;
+ if(!p.ground){for(const s of S){
+  if(p.y+p.h>s[1]+2&&p.y<s[1]+s[3]-2){
+   if(Math.abs(p.x+p.w-s[0])<3&&s[3]>40)p.wall=1;
+   if(Math.abs(p.x-(s[0]+s[2]))<3&&s[3]>40)p.wall=-1;}}}
+ if(p.ground&&p.ground.dx)p.x+=p.ground.dx;
+ if(p.ground)p.gy=p.ground[1];
+ for(const pd of pads)if(p.vy>=0&&hit(p,pd)){p.vy=-980;p.ground=null;p.coyote=0;}
+ for(const b of boxes)if(b.t<=0&&hit(p,[b.x,b.y,28,28])){b.t=10;applyItem(i,ITEMS[Math.floor(Math.random()*ITEMS.length)]);}
+ if(p.x<0)p.x=0;
+ for(let k=0;k<cps.length;k++)if(p.x>cps[k][0]&&k>p.cp)p.cp=k;
+ if(p.y>H+80)die(i);
+ for(const sp of spikes.concat(traps))if(flash[i]<=0&&hit(p,[sp[0]+6,sp[1]+4,sp[2]-12,sp[3]-4]))die(i);
+ if(flash[i]>0)flash[i]-=dt;
+ if(p.x+p.w>FLAG&&state=='play'){winner=i;score[i]++;state=score[i]>=WIN?'match':'round';}
+}
+function update(dt){
+ t+=dt;
+ if(state=='play'||state=='menu'){if(jp.KeyN||jp.KeyB){lvl=(lvl+(jp.KeyN?1:9))%10;reset();}if(jp.KeyR)reset();}
+ if(state=='menu'||state=='round'||state=='match'){
+  if(jp.Enter||jp.Space){
+   if(state=='match')score=[0,0];if(state!='menu')lvl=(lvl+1)%10;reset();state='play';}
+  return;}
+ time+=dt;
+ for(const m of movers){const nx=m.base+(Math.sin(t*1.1+m.ph)+1)/2*m.range;m.dx=nx-m[0];m[0]=nx;}
+ tickWorld(dt);
+ ps.forEach((p,i)=>step(p,i,dt));
+ for(let i=0;i<2;i++){const tg=Math.max(0,Math.min(WORLD-VW/SC,ps[i].x-VW/SC*0.4));cams[i]+=(tg-cams[i])*Math.min(1,dt*6);}
+}
+// Háttér: távoli várossziluett
+const bld=[];for(let i=0,x=0;x<2700;i++){const w=50+(i*37%70),h=80+(i*53%170);bld.push([x,h,w]);x+=w+6;}
+const VW=W/2,SC=0.85,OY=45;
+function drawPlayer(p,i){
+ if(flash[i]>0&&Math.floor(flash[i]*20)%2)return;
+ ctx.fillStyle=col[i];ctx.beginPath();ctx.roundRect(p.x,p.y,p.w,p.h,7);ctx.fill();
+ ctx.fillStyle='#fff';ctx.fillRect(p.x+(p.face>0?15:4),p.y+9,7,7);
+ ctx.fillStyle='#12142a';ctx.fillRect(p.x+(p.face>0?18:5),p.y+11,3,4);
+ ctx.fillStyle=col[i];ctx.beginPath();ctx.moveTo(p.x+p.w/2-5,p.y-10);ctx.lineTo(p.x+p.w/2+5,p.y-10);ctx.lineTo(p.x+p.w/2,p.y-3);ctx.fill();
+ const f=p.fx,c=f.frz>0?'#bfe9ff':f.slow>0?'#4aa3ff':f.rev>0?'#c77dff':f.turbo>0?'#ffd166':null;
+ if(c){if(f.frz>0){ctx.fillStyle='#bfe9ff99';ctx.beginPath();ctx.roundRect(p.x,p.y,p.w,p.h,7);ctx.fill();}
+  ctx.strokeStyle=c;ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(p.x-2,p.y-2,p.w+4,p.h+4,9);ctx.stroke();}
+}
+function spikeShape(sp){const n=Math.floor(sp[2]/16);for(let k=0;k<n;k++){const x=sp[0]+k*sp[2]/n,w=sp[2]/n;
+ ctx.beginPath();ctx.moveTo(x,sp[1]+sp[3]);ctx.lineTo(x+w/2,sp[1]);ctx.lineTo(x+w,sp[1]+sp[3]);ctx.fill();}}
+function view(i){
+ const cx=cams[i],th=T[lvl];
+ ctx.save();ctx.beginPath();ctx.rect(i*VW,0,VW,H);ctx.clip();ctx.translate(i*VW,0);
+ const gr=ctx.createLinearGradient(0,0,0,H);gr.addColorStop(0,th[0]);gr.addColorStop(0.65,th[1]);gr.addColorStop(1,th[2]);
+ ctx.fillStyle=gr;ctx.fillRect(0,0,VW,H);
+ ctx.fillStyle='#f6d9b8';ctx.globalAlpha=0.8;ctx.beginPath();ctx.arc(340-cx*0.05,150,36,0,7);ctx.fill();ctx.globalAlpha=1;
+ ctx.save();ctx.translate(-cx*0.3,0);ctx.fillStyle=th[5];
+ for(const b of bld)ctx.fillRect(b[0],H-b[1]-40,b[2],b[1]+40);ctx.restore();
+ ctx.translate(0,OY);ctx.scale(SC,SC);ctx.translate(-Math.round(cx),0);
+ for(const q of all()){ctx.fillStyle=q.cr?'#6b4a2e':th[3];ctx.fillRect(q[0],q[1],q[2],q[3]);
+  ctx.fillStyle=q.cr?'#e0b070':th[4];ctx.fillRect(q[0],q[1],q[2],4);}
+ ctx.fillStyle='#ffd166';for(const m of movers)ctx.fillRect(m[0],m[1],m[2],4);
+ for(const b of blocks){ctx.fillStyle='#ffd166';ctx.fillRect(b[0],b[1],b[2],b[3]);ctx.strokeStyle='#12142a';ctx.lineWidth=3;ctx.strokeRect(b[0]+1.5,b[1]+1.5,b[2]-3,b[3]-3);}
+ for(const pd of pads){ctx.fillStyle='#8cff6b';ctx.fillRect(pd[0],pd[1],pd[2],pd[3]);ctx.fillStyle='#2b6b1c';ctx.fillRect(pd[0],pd[1]+6,pd[2],4);}
+ ctx.fillStyle='#ff4d6d';for(const sp of spikes.concat(traps))spikeShape(sp);
+ for(const b of boxes)if(b.t<=0){const by=b.y+Math.sin(t*3+b.x)*4;
+  ctx.fillStyle='#ffd166';ctx.beginPath();ctx.roundRect(b.x,by,28,28,6);ctx.fill();
+  ctx.fillStyle='#12142a';ctx.font='800 20px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('?',b.x+14,by+15);}
+ for(const b of shots){ctx.fillStyle=col[b.i];ctx.beginPath();ctx.arc(b.x,b.y,7,0,7);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();}
+ for(let k=1;k<cps.length;k++){
+  const fx=cps[k][1]+10,fy=cps[k][2],a0=ps[0].cp>=k,a1=ps[1].cp>=k;
+  ctx.fillStyle='#e9e6ff';ctx.fillRect(fx,fy-64,3,64);
+  ctx.fillStyle=a0&&a1?'#ffd166':a0?col[0]:a1?col[1]:'#ffffff66';
+  ctx.beginPath();ctx.moveTo(fx+3,fy-64);ctx.lineTo(fx+28,fy-54);ctx.lineTo(fx+3,fy-44);ctx.fill();}
+ for(let k=0;k<8;k++){ctx.fillStyle=k%2?'#fff':'#111';ctx.fillRect(FLAG,60+k*24,16,24);ctx.fillStyle=k%2?'#111':'#fff';ctx.fillRect(FLAG+16,60+k*24,16,24);}
+ ctx.fillStyle='#fff';ctx.fillRect(FLAG-4,40,4,220);
+ ctx.globalAlpha=0.5;drawPlayer(ps[1-i],1-i);ctx.globalAlpha=1;drawPlayer(ps[i],i);
+ ctx.restore();
+}
+function draw(){
+ view(0);view(1);
+ ctx.fillStyle='#0a0b1a';ctx.fillRect(VW-2,0,4,H);
+ ctx.textBaseline='top';
+ ps.forEach((p,i)=>{ctx.textAlign='left';ctx.font='700 17px '+FONT;ctx.fillStyle=col[i];
+  ctx.fillText(names[i]+'  '+'●'.repeat(score[i])+'○'.repeat(WIN-score[i]),i*VW+14,14);
+  ctx.fillStyle='#ffffff30';ctx.fillRect(i*VW+14,40,VW-28,3);ctx.fillStyle=col[i];ctx.fillRect(i*VW+14,40,(VW-28)*Math.min(1,p.x/FLAG),3);
+  ctx.font='700 15px '+FONT;ctx.fillStyle=p.cd>0?'#ffffff80':'#ffd166';
+  ctx.fillText((i?'Enter':'Q')+': lövés',i*VW+14,52);
+  const ef=Object.keys(p.fx).filter(k=>p.fx[k]>0).map(k=>FN[k]+' '+p.fx[k].toFixed(1)).join(', ');
+  ctx.fillStyle='#ff8fa3';if(ef)ctx.fillText(ef,i*VW+14,72);if(p.mt>0){ctx.fillStyle='#ffd166';ctx.fillText('★ '+p.msg,i*VW+14,92);}});
+ ctx.textAlign='center';ctx.font='700 16px '+FONT;
+ const lab='Pálya '+(lvl+1)+'/10: '+TN[lvl]+'   '+time.toFixed(1)+' mp',tw=ctx.measureText(lab).width+20;
+ ctx.fillStyle='#0a0b1acc';ctx.fillRect(VW-tw/2,H-34,tw,26);ctx.fillStyle='#fff';ctx.fillText(lab,VW,H-29);
+ if(state!='play')overlay();
+}
+function overlay(){
+ ctx.fillStyle='#0a0b1acc';ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillStyle='#fff';
+ if(state=='menu'){
+  ctx.font='800 64px '+FONT;ctx.fillText('Parkour Duó',W/2,170);
+  ctx.font='500 20px '+FONT;ctx.fillStyle='#d8d4f0';ctx.fillText('Érj be elsőként a célba. Az nyer, aki '+WIN+' kört megnyer.',W/2,210);
+  ctx.fillStyle=col[0];ctx.font='700 22px '+FONT;ctx.fillText('1. játékos',W/2-170,290);
+  ctx.fillStyle=col[1];ctx.fillText('2. játékos',W/2+170,290);
+  ctx.fillStyle='#fff';ctx.font='500 18px '+FONT;
+  ctx.fillText('A / D mozgás, W ugrás, Q: lövés',W/2-170,322);ctx.fillText('←  → mozgás, ↑ ugrás, Enter: lövés',W/2+170,322);
+  ctx.fillStyle='#d8d4f0';ctx.fillText('Falon ugorj újra: érintsd a falat levegőben, és nyomd az ugrást.',W/2,355);ctx.fillText('A ? dobozok véletlen hatást adnak, a lövés pedig eltaszítja a másikat.',W/2,385);
+  ctx.fillStyle='#d8d4f0';ctx.font='500 18px '+FONT;ctx.fillText('R: pálya újrakezdése   N / B: következő / előző pálya   ('+(lvl+1)+'/10)',W/2,415);ctx.fillStyle='#ffd166';ctx.font='700 22px '+FONT;ctx.fillText('Enter: indítás',W/2,465);
+ }else{
+  ctx.fillStyle=col[winner];ctx.font='800 54px '+FONT;
+  ctx.fillText(names[winner]+(state=='match'?' nyerte a meccset!':' nyerte a kört!'),W/2,230);
+  ctx.fillStyle='#fff';ctx.font='700 30px '+FONT;ctx.fillText(score[0]+'  :  '+score[1],W/2,290);
+  ctx.font='500 18px '+FONT;ctx.fillStyle='#d8d4f0';ctx.fillText('Idő: '+time.toFixed(1)+' mp',W/2,325);
+  ctx.fillStyle='#ffd166';ctx.font='700 22px '+FONT;ctx.fillText(state=='match'?'Enter: új meccs':'Enter: következő pálya',W/2,395);
+ }
+}
+let last=performance.now(),acc=0;
+function loop(n){acc+=Math.min(0.1,(n-last)/1000);last=n;
+ while(acc>=1/120){update(1/120);for(const k in jp)jp[k]=0;acc-=1/120;}
+ draw();requestAnimationFrame(loop);}
+requestAnimationFrame(loop);cv.focus();
+</script>
+</body>
+</html>
