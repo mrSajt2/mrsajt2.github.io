@@ -172,7 +172,7 @@ function tickWorld(dt){
  for(const q of solids)if(q.cr){
   if(q.gone>0){q.gone-=dt;continue;}
   if(q.tm>=0){q.tm-=dt;if(q.tm<0){q.gone=3;q.tm=-1;}}
-  else if(ps.some(p=>p.ground===q))q.tm=0.5;}
+  else if(ps.some(p=>!p.remote&&p.ground===q))q.tm=0.5;} // az omló platform csak helyben (nálad) tűnik el, másoknál nem
  for(const b of boxes)if(b.t>0)b.t-=dt;
  for(const a of [blocks,traps])for(let k=a.length-1;k>=0;k--){a[k].ttl-=dt;if(a[k].ttl<=0)a.splice(k,1);}
 }
@@ -196,7 +196,17 @@ reset();
 const all=()=>solids.filter(q=>!(q.gone>0)).concat(movers,blocks);
 const hit=(a,b)=>a.x<b[0]+b[2]&&a.x+a.w>b[0]&&a.y<b[1]+b[3]&&a.y+a.h>b[1];
 function die(i){const p=ps[i],c=cps[p.cp];if(p.crouch){p.crouch=false;p.h=38;}p.x=c[1];p.y=c[2]-40;p.vx=p.vy=0;p.ground=null;p.flash=0.8;}
+function flyStep(p,i,dt){ // MARCI-csalókód: szabad repülés, ütközés és veszély nélkül
+ const c=CTLO,dx=(K(c.r,keys)?1:0)-(K(c.l,keys)?1:0),dy=(K(c.d,keys)?1:0)-(K(c.j,keys)?1:0);
+ p.vx=dx*420;p.vy=dy*420;p.x=Math.max(0,p.x+p.vx*dt);p.y=Math.max(-300,Math.min(H-p.h,p.y+p.vy*dt));
+ if(p.crouch){p.crouch=false;p.h=38;}if(dx)p.face=dx;p.ground=null;p.gy=p.y+p.h;
+ for(let k=p.cp+1;k<cps.length;k++){const q=cps[k];if(hit(p,[q[1]-8,q[2]-72,48,72]))p.cp=k;}
+ p.cd-=dt;p.mt-=dt;p.flash-=dt;for(const k in p.fx)if(p.fx[k]>0)p.fx[k]-=dt;
+ if(K(c.u,jp))shoot(i);
+ if(p.x+p.w>FLAG&&state=='play')netFinish();
+}
 function step(p,i,dt){
+ if(p.fly){flyStep(p,i,dt);return;}
  if(p.ground&&p.ground.dy)p.y+=p.ground.dy; // felvonó viszi a rajta állót
  const c=online?CTLO:ctl[i],fx=p.fx,L=K(c.l,keys)?1:0,R=K(c.r,keys)?1:0,dir=fx.frz>0?0:(R-L)*(fx.rev>0?-1:1);
  for(const k in fx)if(fx[k]>0)fx[k]-=dt;
@@ -278,6 +288,7 @@ function drawPlayer(p,i){
  ctx.fillStyle='#12142a';ctx.fillRect(p.x+(p.face>0?18:5),p.y+11,3,4);
  ctx.fillStyle=col[p.slot];ctx.beginPath();ctx.moveTo(p.x+p.w/2-5,p.y-10);ctx.lineTo(p.x+p.w/2+5,p.y-10);ctx.lineTo(p.x+p.w/2,p.y-3);ctx.fill();
  if(online&&p.name){ctx.fillStyle='#fff';ctx.font='700 12px '+FONT;ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText(p.name,p.x+p.w/2,p.y-42);}
+ if(p.fly){ctx.fillStyle='#ffffffcc';for(const sd of [-1,1]){const bx=sd<0?p.x:p.x+p.w;ctx.beginPath();ctx.moveTo(bx,p.y+12);ctx.lineTo(bx+sd*18,p.y+2);ctx.lineTo(bx+sd*8,p.y+22);ctx.closePath();ctx.fill();}}
  const f=p.fx,c=f.frz>0?'#bfe9ff':f.slow>0?'#4aa3ff':f.rev>0?'#c77dff':f.turbo>0?'#ffd166':f.heavy>0?'#9aa0b5':null;
  if(f.heavy>0){ctx.fillStyle='#9aa0b5';ctx.fillRect(p.x+2,p.y-34,22,8);ctx.fillRect(p.x+8,p.y-26,10,6);}
  if(c){if(f.frz>0){ctx.fillStyle='#bfe9ff99';ctx.beginPath();ctx.roundRect(p.x,p.y,p.w,p.h,7);ctx.fill();}
@@ -354,6 +365,7 @@ function draw(){
  const lab='Pálya '+(lvl+1)+': '+TN[theme]+' / '+SN[stl]+', '+CN[cls]+'   '+time.toFixed(1)+' mp',tw=ctx.measureText(lab).width+20;
  ctx.fillStyle='#0a0b1acc';ctx.fillRect(W/2-tw/2,H-34,tw,26);ctx.fillStyle='#fff';ctx.fillText(lab,W/2,H-29);
  if(state!='play')overlay();
+ if(online&&state=='play'&&ps[me]&&ps[me].fly){ctx.fillStyle='#ffffffcc';ctx.font='700 14px '+FONT;ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText('✈ REPÜLÉS',W/2,14);}
  if(online&&state=='play'&&t<0){ctx.fillStyle='#0a0b1a99';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.font='800 120px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.ceil(-t),W/2,H/2);}
 }
 function overlay(){
@@ -379,9 +391,9 @@ function overlay(){
 }
 // ===== ONLINE MULTIPLAYER (Firebase Realtime Database) =====
 // Töltsd ki a Firebase-konzolról kapott adatokkal (Project settings → Your apps → Web app → firebaseConfig):
-const FIREBASE_CONFIG={apiKey:'AIzaSyBrFN8cJ3iu16mxv6adqqRiiSR6J1_fK3w',authDomain:'parkour-duo.firebaseapp.com',databaseURL:'https://parkour-duo-default-rtdb.europe-west1.firebasedatabase.app',projectId:'parkour-duo',appId:'1:1039319639561:web:616cb42793a3ce38303ad8'};
+const FIREBASE_CONFIG={apiKey:'',authDomain:'',databaseURL:'',projectId:'',appId:''};
 const $=id=>document.getElementById(id);
-let FB=null,room=null,roster={},offs=0,startAt=0,unsubs=[],mySlot=0,evStart=0,advTimer=null,offsOn=false;
+let cheat='',FB=null,room=null,roster={},offs=0,startAt=0,unsubs=[],mySlot=0,evStart=0,advTimer=null,offsOn=false;
 const sNow=()=>Date.now()+offs, netT=()=>(sNow()-startAt)/1000;
 const R=q=>FB.ref(FB.db,'rooms/'+room+(q?'/'+q:''));
 function show(q){$('ui').hidden=!q;for(const el of $('ui').children)el.hidden=el.id!=='p-'+q;if(!q)cv.focus();}
@@ -459,12 +471,12 @@ function netPlayers(){
 }
 function netSend(){
  const q=ps[me];if(!q||!room)return;
- FB.set(R('states/'+FB.uid),{x:Math.round(q.x),y:Math.round(q.y),f:q.face,h:q.h,c:q.crouch?1:0,cp:q.cp,gy:Math.round(q.gy),fl:q.flash>0.5?1:0,l:lvl});
+ FB.set(R('states/'+FB.uid),{x:Math.round(q.x),y:Math.round(q.y),f:q.face,h:q.h,c:q.crouch?1:0,cp:q.cp,gy:Math.round(q.gy),fl:q.flash>0.5?1:0,l:lvl,fy:q.fly?1:0});
 }
 function onState(sn){
  const u=sn.key,d=sn.val();if(!d||!online||u===(FB&&FB.uid))return;
  const q=ps.find(z=>z.uid===u);if(!q||d.l!==lvl)return;
- q.tx=d.x;q.ty=d.y;q.face=d.f;q.h=d.h;q.crouch=!!d.c;q.cp=d.cp;q.gy=d.gy;
+ q.tx=d.x;q.ty=d.y;q.face=d.f;q.h=d.h;q.crouch=!!d.c;q.cp=d.cp;q.gy=d.gy;q.fly=!!d.fy;
  if(d.fl&&!(q.flash>0))q.flash=0.5;
  if(Math.abs(q.x-q.tx)>300||Math.abs(q.y-q.ty)>300){q.x=q.tx;q.y=q.ty;}
 }
@@ -527,7 +539,10 @@ $('b-start').onclick=startGame;
 $('b-leave').onclick=()=>leaveRoom();
 try{$('i-name').value=localStorage.getItem('pdName')||'';}catch(e){}
 $('i-name').onchange=()=>{try{localStorage.setItem('pdName',$('i-name').value);}catch(e){}};
-addEventListener('keydown',e=>{if(e.code=='Escape'){if(room)leaveRoom();else{online=false;state='mode';VW=W/2;show('mode');}}});
+addEventListener('keydown',e=>{
+ if(e.key&&e.key.length==1&&!e.repeat){cheat=(cheat+e.key.toUpperCase()).slice(-5);
+  if(cheat=='MARCI'&&online&&state=='play'&&ps[me]){const q=ps[me];q.fly=!q.fly;q.vx=q.vy=0;q.msg=q.fly?'✈ Repülés be (MARCI)':'Repülés ki';q.mt=2.5;cheat='';}}
+ if(e.code=='Escape'){if(room)leaveRoom();else{online=false;state='mode';VW=W/2;show('mode');}}});
 show('mode');
 let last=performance.now(),acc=0;
 function loop(n){acc+=Math.min(0.1,(n-last)/1000);last=n;
