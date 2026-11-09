@@ -11,8 +11,8 @@ body{display:flex;align-items:center;justify-content:center;font-family:"Avenir 
 #wrap{position:relative;width:100%;max-width:min(100vw,calc((100vh - 8px) * 16 / 9));aspect-ratio:16/9}
 canvas{width:100%;height:100%;display:block;background:#1b1f3b}
 [hidden]{display:none!important}
-#ui{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#0a0b1af0;color:#fff;font-size:clamp(11px,1.9vw,18px)}
-#ui>div{display:flex;flex-direction:column;gap:.8em;align-items:center;width:min(90%,26em);text-align:center}
+#ui{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#0a0b1af0;color:#fff;font-size:clamp(11px,1.9vw,18px);overflow:auto}
+#ui>div{display:flex;flex-direction:column;gap:.8em;align-items:center;width:min(90%,26em);text-align:center;margin:auto}
 h1{margin:0 0 .3em;font-size:2.6em;font-weight:800}
 button,input{font:inherit;border-radius:.6em;border:2px solid #ffffff30;background:#1d2145;color:#fff;padding:.7em 1em;width:100%;box-sizing:border-box}
 button{cursor:pointer;font-weight:700}button:hover{background:#2a3070}
@@ -27,10 +27,15 @@ button.pri{background:#ff7a45;border-color:#ff7a45;color:#1b1030}button.pri:hove
 <div id="wrap"><canvas id="c" width="960" height="540" tabindex="0"></canvas>
 <div id="ui">
  <div id="p-mode"><h1>Parkour Duó</h1><button class="pri" id="b-local">👥 2 játékos egy gépen</button><button id="b-online">🌐 Online multiplayer (max. 4 fő)</button><small>Esc: vissza erre a képernyőre</small></div>
- <div id="p-online" hidden><h1>Online</h1><input id="i-name" maxlength="12" placeholder="Becenév"><button class="pri" id="b-create">Szoba létrehozása</button>
+ <div id="p-online" hidden><h1>Online</h1><input id="i-name" maxlength="12" placeholder="Becenév">
+  <div class="row"><button id="v-pub" class="pri">🌐 Nyilvános</button><button id="v-priv">🔒 Csak kóddal</button></div>
+  <button class="pri" id="b-create">Szoba létrehozása</button>
   <div class="row"><input id="i-code" maxlength="4" placeholder="Szobakód" style="text-transform:uppercase"><button id="b-join">Csatlakozás</button></div>
-  <div class="err" id="err"></div><button id="b-back">Vissza</button></div>
- <div id="p-room" hidden><small>Szobakód (oszd meg a barátaiddal)</small><div class="code" id="room-code"></div><div id="slots" style="width:100%;display:flex;flex-direction:column;gap:.4em"></div>
+  <div class="err" id="err"></div>
+  <div style="width:100%;text-align:left"><small>Nyilvános szobák (kattints a csatlakozáshoz)</small></div>
+  <div id="lobbies" style="width:100%;display:flex;flex-direction:column;gap:.4em"></div>
+  <button id="b-back">Vissza</button></div>
+ <div id="p-room" hidden><small>Szobakód (oszd meg a barátaiddal)</small><div class="code" id="room-code"></div><small id="vis"></small><div id="slots" style="width:100%;display:flex;flex-direction:column;gap:.4em"></div>
   <button class="pri" id="b-start">Indítás</button><small id="wait"></small><button id="b-leave">Kilépés</button></div>
 </div></div>
 <script>
@@ -391,12 +396,27 @@ function overlay(){
 }
 // ===== ONLINE MULTIPLAYER (Firebase Realtime Database) =====
 // Töltsd ki a Firebase-konzolról kapott adatokkal (Project settings → Your apps → Web app → firebaseConfig):
-const FIREBASE_CONFIG={apiKey:'AIzaSyBrFN8cJ3iu16mxv6adqqRiiSR6J1_fK3w',authDomain:'parkour-duo.firebaseapp.com',databaseURL:'https://parkour-duo-default-rtdb.europe-west1.firebasedatabase.app',projectId:'parkour-duo',appId:'1:1039319639561:web:616cb42793a3ce38303ad8'};
+const FIREBASE_CONFIG={apiKey:'',authDomain:'',databaseURL:'',projectId:'',appId:''};
 const $=id=>document.getElementById(id);
-let cheat='',FB=null,room=null,roster={},offs=0,startAt=0,unsubs=[],mySlot=0,evStart=0,advTimer=null,offsOn=false;
+let lobbyOff=null,vis='public',cheat='',FB=null,room=null,roster={},offs=0,startAt=0,unsubs=[],mySlot=0,evStart=0,advTimer=null,offsOn=false;
 const sNow=()=>Date.now()+offs, netT=()=>(sNow()-startAt)/1000;
 const R=q=>FB.ref(FB.db,'rooms/'+room+(q?'/'+q:''));
-function show(q){$('ui').hidden=!q;for(const el of $('ui').children)el.hidden=el.id!=='p-'+q;if(!q)cv.focus();}
+function show(q){$('ui').hidden=!q;for(const el of $('ui').children)el.hidden=el.id!=='p-'+q;if(!q)cv.focus();if(q==='online')watchLobbies();else unwatchLobbies();}
+function watchLobbies(){if(lobbyOff)return;fbInit().then(()=>{if(!lobbyOff&&!$('p-online').hidden)lobbyOff=FB.onValue(FB.ref(FB.db,'lobbies'),renderLobbies);}).catch(e=>{$('err').textContent=e.message||String(e);});}
+function unwatchLobbies(){if(lobbyOff){lobbyOff();lobbyOff=null;}}
+function renderLobbies(sn){
+ const box=$('lobbies');if(!box)return;box.textContent='';
+ const list=Object.entries(sn.val()||{}).filter(([c,l])=>l&&l.status==='lobby');
+ if(!list.length){const e=document.createElement('small');e.textContent='Most nincs nyilvános szoba. Hozz létre egyet!';box.append(e);return;}
+ for(const [c,l] of list){
+  const d=document.createElement('div');d.className='slot';d.style.setProperty('--c','#ffd166');
+  const a=document.createElement('span');a.textContent=(l.title||'Szoba')+'  ·  '+c;
+  const b=document.createElement('button');b.textContent=(l.count|0)+'/4  Csatlakozás';b.style.width='auto';
+  if((l.count|0)>=4){b.textContent='Tele (4/4)';b.disabled=true;}
+  b.onclick=()=>doNet(()=>joinRoom(c,nm()));
+  d.append(a,b);box.append(d);
+ }
+}
 async function fbInit(){
  if(FB)return FB;
  if(window.__FB_FACTORY)FB=await window.__FB_FACTORY();
@@ -412,13 +432,14 @@ async function fbInit(){
  if(!offsOn){offsOn=true;FB.onValue(FB.ref(FB.db,'.info/serverTimeOffset'),sn=>{offs=sn.val()||0;});}
  return FB;
 }
-async function createRoom(name){
+async function createRoom(name,v='public'){
  await fbInit();
  let code,ok=false;
  for(let k=0;k<8&&!ok;k++){code=Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.random()*32|0]).join('');
   ok=!(await FB.get(FB.ref(FB.db,'rooms/'+code+'/meta'))).exists();}
  if(!ok)throw new Error('Nem sikerült szabad szobakódot találni.');
- const up={};up['rooms/'+code+'/meta']={host:FB.uid,seed:Math.floor(Math.random()*1e6),status:'lobby',lvl:0,startAt:0};
+ const up={};up['rooms/'+code+'/meta']={host:FB.uid,seed:Math.floor(Math.random()*1e6),status:'lobby',lvl:0,startAt:0,vis:v};
+ if(v==='public')up['lobbies/'+code]={uid:FB.uid,title:name+' szobája',count:1,status:'lobby'};
  up['rooms/'+code+'/slots/0']=FB.uid;up['rooms/'+code+'/players/'+FB.uid]={name,slot:0,score:0};
  await FB.update(FB.ref(FB.db),up);
  enterRoom(code,0,true);
@@ -437,7 +458,7 @@ async function joinRoom(code,name){
 }
 function enterRoom(code,slot,host){
  room=code;mySlot=slot;roster={};meta=null;evStart=sNow();
- if(host)FB.onDisconnect(R('')).remove();
+ if(host){FB.onDisconnect(R('')).remove();FB.onDisconnect(FB.ref(FB.db,'lobbies/'+code)).remove();}
  else{FB.onDisconnect(R('slots/'+slot)).remove();FB.onDisconnect(R('players/'+FB.uid)).remove();FB.onDisconnect(R('states/'+FB.uid)).remove();}
  unsubs=[FB.onValue(R('meta'),onMeta),FB.onValue(R('players'),onPlayers),FB.onChildAdded(R('states'),onState),FB.onChildChanged(R('states'),onState),
   FB.onChildAdded(R('events'),onEvent),FB.onValue(R('win'),onWin)];
@@ -445,7 +466,7 @@ function enterRoom(code,slot,host){
 }
 function leaveRoom(msg){
  for(const u of unsubs){try{u();}catch(e){}}unsubs=[];clearTimeout(advTimer);
- if(FB&&room){try{if(meta&&meta.host===FB.uid)FB.remove(R(''));else{FB.remove(R('slots/'+mySlot));FB.remove(R('players/'+FB.uid));FB.remove(R('states/'+FB.uid));}}catch(e){}}
+ if(FB&&room){try{if(meta&&meta.host===FB.uid){FB.remove(R(''));FB.remove(FB.ref(FB.db,'lobbies/'+room));}else{FB.remove(R('slots/'+mySlot));FB.remove(R('players/'+FB.uid));FB.remove(R('states/'+FB.uid));}}catch(e){}}
  room=null;meta=null;roster={};online=false;VW=W/2;state='mode';lvl=0;SEED=Math.floor(Math.random()*1e6);reset();
  if(msg){$('err').textContent=msg;show('online');}else show('mode');
 }
@@ -461,6 +482,7 @@ function startRound(m){
 }
 function onPlayers(sn){
  roster=sn.val()||{};for(const u in roster)score[roster[u].slot]=roster[u].score|0;
+ if(room&&meta&&FB&&meta.host===FB.uid&&meta.vis==='public'&&meta.status==='lobby')FB.update(FB.ref(FB.db,'lobbies/'+room),{count:Object.keys(roster).length});
  if(online&&ps.length){const keep=ps.filter(q=>roster[q.uid]);if(keep.length!==ps.length){const mp=ps[me];ps=keep;me=Math.max(0,ps.indexOf(mp));}}
  renderRoom();
 }
@@ -524,16 +546,21 @@ function renderRoom(){
   const a=document.createElement('span'),b=document.createElement('span');
   a.textContent=e?e[1].name+(meta&&meta.host===e[0]?' 👑':''):'üres hely';b.textContent=e&&FB&&e[0]===FB.uid?'te':'';
   d.append(a,b);box.append(d);}
+ const vt=$('vis');if(vt&&meta)vt.textContent=meta.vis==='public'?'Nyilvános szoba – látszik a listában':'Privát szoba – csak kóddal csatlakozhatsz';
  const host=!!(meta&&FB&&meta.host===FB.uid);$('b-start').hidden=!host;$('wait').textContent=host?'':'Várakozás a házigazdára…';
 }
-function startGame(){if(meta&&FB&&meta.host===FB.uid)FB.update(R('meta'),{status:'play',lvl:0,startAt:sNow()+3500});}
+function startGame(){if(meta&&FB&&meta.host===FB.uid){FB.update(R('meta'),{status:'play',lvl:0,startAt:sNow()+3500});FB.remove(FB.ref(FB.db,'lobbies/'+room));}}
 const nm=()=>($('i-name').value.trim()||'Játékos').slice(0,12);
 async function doNet(f){$('err').textContent='';try{await f();}catch(e){room=null;$('err').textContent=e.message||String(e);}}
 function startLocal(){online=false;SEED=Math.floor(Math.random()*1e6);VW=W/2;lvl=0;score=[0,0,0,0];reset();state='menu';show(null);}
 $('b-local').onclick=startLocal;
 $('b-online').onclick=()=>{$('err').textContent='';show('online');};
 $('b-back').onclick=()=>show('mode');
-$('b-create').onclick=()=>doNet(()=>createRoom(nm()));
+function paintVis(){$('v-pub').className=vis==='public'?'pri':'';$('v-priv').className=vis==='private'?'pri':'';}
+$('v-pub').onclick=()=>{vis='public';paintVis();};
+$('v-priv').onclick=()=>{vis='private';paintVis();};
+paintVis();
+$('b-create').onclick=()=>doNet(()=>createRoom(nm(),vis));
 $('b-join').onclick=()=>doNet(()=>joinRoom($('i-code').value.trim().toUpperCase(),nm()));
 $('b-start').onclick=startGame;
 $('b-leave').onclick=()=>leaveRoom();
